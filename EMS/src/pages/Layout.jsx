@@ -5,17 +5,16 @@ import Navbar from '../components/Navbar'
 
 const Layout = () => {
     return (
-        <div className="flex min-h-screen bg-slate-50">
-            <Sidebar />
-            <div className="flex-1 flex flex-col min-w-0">
-                <Navbar />
-                <main className="flex-1 p-8 overflow-y-auto">
-                    <div className="max-w-7xl mx-auto animate-fade-in">
-                        <Outlet />
-                    </div>
-                </main>
-            </div>
+        <div className="min-h-screen bg-slate-50">
+      <Sidebar />
+
+      {/* lg:pl-64 shifts the entire block right by 256px on desktop so nothing gets covered */}
+      <main className="w-full pt-16 lg:pt-0 lg:pl-64">
+        <div className="p-4 sm:p-6 lg:p-8">
+          <Outlet />
         </div>
+      </main>
+    </div>
     )
 }
 
