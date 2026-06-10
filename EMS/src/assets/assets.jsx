@@ -1,5 +1,30 @@
 export const DEPARTMENTS = ["Engineering", "Human Resources", "Marketing", "Sales", "Finance", "Operations", "IT Support", "Customer Success", "Product Management", "Design"];
 
+export const POSITIONS = [
+    "Software Engineer",
+    "Associate Business Support",
+    "Software Developer",
+    "Senior Software Developer",
+    "HR Manager",
+    "Sales Executive",
+    "Marketing Specialist",
+    "Product Manager",
+    "Operations Coordinator",
+    "IT Support Specialist",
+];
+export const DEPARTMENT = [
+    "Engineering",
+    "Human Resource",
+    "Marketing",
+    "Sales",
+    "Finance",
+    "Operations",
+    "IT Support",
+    "Customer Success",
+    "Product Management",
+    "Design",
+];
+
 export const dummyAdminDashboardData = {
     role: "ADMIN",
     totalEmployees: 3,
