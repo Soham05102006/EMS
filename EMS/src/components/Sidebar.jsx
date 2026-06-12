@@ -34,7 +34,7 @@ export default function Sidebar() {
   }, [pathname]);
 
   // Role setup shown in the video
-  const role = "ADMIN"; // Toggle between "ADMIN" and "EMPLOYEE"
+  const role = "EMPLOYEE"; // Toggle between "ADMIN" and "EMPLOYEE"
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutGridIcon },
