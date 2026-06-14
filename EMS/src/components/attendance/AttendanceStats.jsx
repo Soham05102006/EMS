@@ -19,7 +19,8 @@ const Attendancestats = ({history}) => {
                      {stats.map((card) => (
                        //const Icon = card.icon
                       
-                        <div key={card.label} className="card card-hover p-5 sm:p-6 relative overflow-hidden group flex items-center justify-between">
+                        <div key={card.label} className="card card-hover p-5 sm:p-6 relative
+                         overflow-hidden group flex items-center ">
                             
                                 <div className='absolute left-0 top-0 bottom-0 w-1 
                                 rounded-r-full bg-slate-500/70 group-hover:bg-indigo-500/70'/>
