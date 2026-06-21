@@ -52,6 +52,7 @@ export const dummyProfileData = {
     firstName: "Soham",
     lastName: "Ghatole",
     email: "sohamghatole@example.com",
+    position: "Software Engineer",
     image: null,
 };
 
