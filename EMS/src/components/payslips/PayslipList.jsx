@@ -45,7 +45,7 @@ const PayslipList = ({payslip, isAdmin}) => {
                                                       ${item.netSalary?.toLocaleString()}
                                                    </td>
                                                    <td className='text-center'>
-                                                      <button onClick={()=>window.open(`/print/payslip/${item._id || item.id}`)}
+                                                      <button onClick={()=>window.open(`/print/payslips/${item._id || item.id}`)}
                                                        className='inline-flex items-center py-3 px-1.5 text-xs font-medium rounded text-blue-600
                                                       bg-blue-50 hover:bg-blue-100 transition-colors ring-1 ring-blue-600/10'>
                                                         <Download className='w-3 h-3 mr-1.5'/> Download
