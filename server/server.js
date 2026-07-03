@@ -9,6 +9,8 @@ import profileRouter from  './routes/profileRoutes.js'
 import attendanceRouter from './routes/attendanceRouter.js';
 import leaveRouter from './routes/leaveRouter.js';
 import payslipRouter from './routes/payslipsRoutes.js';
+import dashboardRouter from './routes/dashboardRouter.js';
+
 
 const app = express()
 const PORT = process.env.PORT || 4000;
@@ -27,6 +29,8 @@ app.use("/api/profile", profileRouter)
 app.use("/api/attendace", attendanceRouter)
 app.use("/api/leave", leaveRouter)
 app.use("/api/payslip", payslipRouter)
+app.use("/api/dashboard", dashboardRouter)
+
 
 await connectDB()
 app.listen(PORT, ()=> console.log(`Server Running on Port ${PORT}`))
