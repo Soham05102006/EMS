@@ -10,7 +10,7 @@ const payslipSchema = new mongoose.Schema({
    netSalary: { type: Number, required: true },
 }, {timestamps: true})
 
-attendanceSchema.index({employeeId : 1, date : 1}, {unique : 1})
+payslipSchema.index({ employeeId: 1, month: 1, year: 1 }, { unique: true })
 
 const Payslip = mongoose.models.Payslip || mongoose.model("Payslip", payslipSchema)
 

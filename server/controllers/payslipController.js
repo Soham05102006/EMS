@@ -1,13 +1,13 @@
 import { json } from "express";
 import Payslip from "../models/Payslip.js";
-import Employee from "../models/Employee";
+import Employee from "../models/Employee.js";
 
 
 //Create PaySlip
 //POST //api/payslips
 export const createPayslip = async (req , res) =>{
     try {
-        const {employeeId, month, year, basicSalary, allowances, deductions, netSalary} = req.body;
+        const {employeeId, month, year, basicSalary, allowances, deductions} = req.body;
 
         if(!employeeId || !month || !year || !basicSalary){
             return res.status(400).json({ error: "Missing fields"});
@@ -21,7 +21,7 @@ export const createPayslip = async (req , res) =>{
             basicSalary : Number(basicSalary || 0),
             allowances : Number(allowances || 0),
             deductions : Number(deductions || 0),
-            netSalary,
+            netSalary : Number(netSalary || 0),
         })
 
         return res.json({success: true, data: payslip})

@@ -1,4 +1,7 @@
 import mongoose from "mongoose";
+import Employee from "./Employee.js";
+import Attendance from "./Attendance.js";
+import { Schema } from "mongoose";
 
 const leaveApplicationSchema = new mongoose.Schema({
   employeeId: {
@@ -32,7 +35,7 @@ const leaveApplicationSchema = new mongoose.Schema({
 
 const LeaveApplication =
   mongoose.models.LeaveApplication ||
-  mongoose.model("LeaveApplication", );
+  mongoose.model("LeaveApplication", leaveApplicationSchema);
 
 
-  export default LeaveApplication;
+export default LeaveApplication;
