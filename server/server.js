@@ -38,3 +38,5 @@ app.use("/api/inngest", serve({ client: inngest, functions }));
 
 await connectDB()
 app.listen(PORT, ()=> console.log(`Server Running on Port ${PORT}`))
+
+export default app;
