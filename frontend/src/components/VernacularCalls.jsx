@@ -35,6 +35,10 @@ export default function VernacularCalls({ onTriggerVoice }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [languageFilter, setLanguageFilter] = useState('ALL');
+  const [dateRangeFilter, setDateRangeFilter] = useState('ALL');
+  const [vendorTypeFilter, setVendorTypeFilter] = useState('ALL');
+  const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+  const [isVendorDropdownOpen, setIsVendorDropdownOpen] = useState(false);
   const [selectedCallId, setSelectedCallId] = useState('call-001');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState(null); // 'AI' | 'CUSTOMER' | null
@@ -45,6 +49,45 @@ export default function VernacularCalls({ onTriggerVoice }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isDispatchingBatch, setIsDispatchingBatch] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+
+  const dateDropdownRef = useRef(null);
+  const vendorDropdownRef = useRef(null);
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateDropdownRef.current && !dateDropdownRef.current.contains(event.target)) {
+        setIsDateDropdownOpen(false);
+      }
+      if (vendorDropdownRef.current && !vendorDropdownRef.current.contains(event.target)) {
+        setIsVendorDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Helper to resolve vendor type for calls
+  const getCallVendorType = (call) => {
+    if (call?.vendor_type) return call.vendor_type;
+    const name = call?.contact_name || '';
+    if (name.includes('Logistics') || name.includes('Freight') || name.includes('Transport')) return 'Logistics';
+    if (name.includes('Electrical') || name.includes('Steel') || name.includes('Alloys') || name.includes('Fabricators')) return 'Supplier';
+    if (name.includes('Hardware') || name.includes('Distributor') || name.includes('Store')) return 'Distributor';
+    return 'Customer';
+  };
+
+  // Helper to parse call / promise date
+  const parseCallDate = (call) => {
+    const dStr = call?.promised_date || call?.call_date;
+    if (!dStr) return null;
+    if (/^\d{4}-\d{2}-\d{2}/.test(dStr)) {
+      const parts = dStr.split('-');
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    const d = new Date(dStr);
+    return isNaN(d.getTime()) ? null : d;
+  };
 
   // Manual call form state
   const [manualVendor, setManualVendor] = useState('Sharma Metal Works');
@@ -347,10 +390,39 @@ export default function VernacularCalls({ onTriggerVoice }) {
       c.masked_phone?.includes(searchQuery) ||
       c.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus = statusFilter === 'ALL' || c.call_status === statusFilter;
-    const matchesLanguage = languageFilter === 'ALL' || c.language?.toLowerCase().includes(languageFilter.toLowerCase());
+    if (!matchesSearch) return false;
 
-    return matchesSearch && matchesStatus && matchesLanguage;
+    if (statusFilter !== 'ALL' && c.call_status !== statusFilter) {
+      return false;
+    }
+
+    if (languageFilter !== 'ALL' && !c.language?.toLowerCase().includes(languageFilter.toLowerCase())) {
+      return false;
+    }
+
+    if (vendorTypeFilter !== 'ALL') {
+      const vType = getCallVendorType(c);
+      if (vType.toLowerCase() !== vendorTypeFilter.toLowerCase()) {
+        return false;
+      }
+    }
+
+    if (dateRangeFilter !== 'ALL') {
+      const callDate = parseCallDate(c);
+      if (callDate) {
+        // Timeline anchor Oct 30, 2026
+        const refDate = new Date(2026, 9, 30);
+        const diffMs = refDate.getTime() - callDate.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        if (dateRangeFilter === 'TODAY' && diffDays !== 0) return false;
+        if (dateRangeFilter === '7_DAYS' && (diffDays < 0 || diffDays > 7)) return false;
+        if (dateRangeFilter === '15_DAYS' && (diffDays < 0 || diffDays > 15)) return false;
+        if (dateRangeFilter === '30_DAYS' && (diffDays < 0 || diffDays > 30)) return false;
+        if (dateRangeFilter === 'THIS_MONTH' && (callDate.getFullYear() !== 2026 || callDate.getMonth() !== 9)) return false;
+      }
+    }
+
+    return true;
   });
 
   // Trigger manual call submission
@@ -553,21 +625,133 @@ export default function VernacularCalls({ onTriggerVoice }) {
           </div>
 
           {/* Date Range Dropdown */}
-          <div className="relative hidden sm:block">
-            <button className="bg-[#111622] border border-[#1d2538] rounded-xl px-3 py-2 text-xs text-slate-300 flex items-center gap-2 hover:bg-[#161d2c] transition-colors">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-              <span>Date Range</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+          <div className="relative" ref={dateDropdownRef}>
+            <button
+              onClick={() => {
+                setIsDateDropdownOpen(!isDateDropdownOpen);
+                setIsVendorDropdownOpen(false);
+              }}
+              className={`rounded-xl px-3 py-2 text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                dateRangeFilter !== 'ALL'
+                  ? 'bg-[#15233c] text-sky-300 border border-sky-500/50 font-semibold shadow-sm'
+                  : 'bg-[#111622] border border-[#1d2538] text-slate-300 hover:bg-[#161d2c]'
+              }`}
+            >
+              <Calendar className={`w-3.5 h-3.5 ${dateRangeFilter !== 'ALL' ? 'text-sky-400' : 'text-slate-400'}`} />
+              <span>
+                {dateRangeFilter === 'ALL' && 'Date Range'}
+                {dateRangeFilter === 'TODAY' && 'Today (Oct 30)'}
+                {dateRangeFilter === '7_DAYS' && 'Last 7 Days'}
+                {dateRangeFilter === '15_DAYS' && 'Last 15 Days'}
+                {dateRangeFilter === '30_DAYS' && 'Last 30 Days'}
+                {dateRangeFilter === 'THIS_MONTH' && 'This Month (Oct)'}
+              </span>
+              {dateRangeFilter !== 'ALL' ? (
+                <X
+                  className="w-3.5 h-3.5 text-slate-400 hover:text-white ml-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDateRangeFilter('ALL');
+                  }}
+                />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              )}
             </button>
+
+            {/* Dropdown Menu */}
+            {isDateDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[210px] bg-[#0e1422] border border-slate-700/80 rounded-xl shadow-2xl p-1.5 backdrop-blur-md">
+                <div className="text-[10px] font-bold text-slate-500 uppercase px-2.5 py-1 tracking-wider">
+                  Select Call Date Range
+                </div>
+                {[
+                  { id: 'ALL', label: 'All Dates (Reset)' },
+                  { id: 'TODAY', label: 'Today (Oct 30, 2026)' },
+                  { id: '7_DAYS', label: 'Last 7 Days (Oct 23 - 30)' },
+                  { id: '15_DAYS', label: 'Last 15 Days (Oct 15 - 30)' },
+                  { id: '30_DAYS', label: 'Last 30 Days' },
+                  { id: 'THIS_MONTH', label: 'This Month (Oct 2026)' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      setDateRangeFilter(opt.id);
+                      setIsDateDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                      dateRangeFilter === opt.id
+                        ? 'bg-sky-500/15 text-sky-400 font-semibold'
+                        : 'text-slate-300 hover:bg-[#161e2e] hover:text-white'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {dateRangeFilter === opt.id && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Vendor Type Dropdown */}
-          <div className="relative hidden sm:block">
-            <button className="bg-[#111622] border border-[#1d2538] rounded-xl px-3 py-2 text-xs text-slate-300 flex items-center gap-2 hover:bg-[#161d2c] transition-colors">
-              <Building2 className="w-3.5 h-3.5 text-slate-400" />
-              <span>Vendor Type</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+          <div className="relative" ref={vendorDropdownRef}>
+            <button
+              onClick={() => {
+                setIsVendorDropdownOpen(!isVendorDropdownOpen);
+                setIsDateDropdownOpen(false);
+              }}
+              className={`rounded-xl px-3 py-2 text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                vendorTypeFilter !== 'ALL'
+                  ? 'bg-[#15233c] text-sky-300 border border-sky-500/50 font-semibold shadow-sm'
+                  : 'bg-[#111622] border border-[#1d2538] text-slate-300 hover:bg-[#161d2c]'
+              }`}
+            >
+              <Building2 className={`w-3.5 h-3.5 ${vendorTypeFilter !== 'ALL' ? 'text-sky-400' : 'text-slate-400'}`} />
+              <span>{vendorTypeFilter === 'ALL' ? 'Vendor Type' : vendorTypeFilter}</span>
+              {vendorTypeFilter !== 'ALL' ? (
+                <X
+                  className="w-3.5 h-3.5 text-slate-400 hover:text-white ml-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setVendorTypeFilter('ALL');
+                  }}
+                />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              )}
             </button>
+
+            {/* Dropdown Menu */}
+            {isVendorDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[200px] bg-[#0e1422] border border-slate-700/80 rounded-xl shadow-2xl p-1.5 backdrop-blur-md">
+                <div className="text-[10px] font-bold text-slate-500 uppercase px-2.5 py-1 tracking-wider">
+                  Filter by Vendor Type
+                </div>
+                {[
+                  { id: 'ALL', label: 'All Vendor Types (Reset)' },
+                  { id: 'Customer', label: 'Customers (Debtors)' },
+                  { id: 'Supplier', label: 'Suppliers (Vendors)' },
+                  { id: 'Logistics', label: 'Logistics & Haulage' },
+                  { id: 'Distributor', label: 'Distributors & Retail' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      setVendorTypeFilter(opt.id);
+                      setIsVendorDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                      vendorTypeFilter === opt.id
+                        ? 'bg-sky-500/15 text-sky-400 font-semibold'
+                        : 'text-slate-300 hover:bg-[#161e2e] hover:text-white'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {vendorTypeFilter === opt.id && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -621,35 +805,60 @@ export default function VernacularCalls({ onTriggerVoice }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#182030]">
-                {filteredCalls.map((c) => {
-                  const isSelected = selectedCallId === c.id;
-                  const isConnected = c.call_status === 'CONNECTED';
-                  const isPromise = c.call_status === 'PROMISE SECURED';
-                  const isRetry = c.call_status === 'RETRY SCHEDULED';
-                  const isNoAnswer = c.call_status === 'NO ANSWER';
+                {filteredCalls.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="py-8 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-amber-400" />
+                        <span className="text-xs">No calls found matching selected filters.</span>
+                        <button
+                          onClick={() => {
+                            setSearchQuery('');
+                            setStatusFilter('ALL');
+                            setLanguageFilter('ALL');
+                            setDateRangeFilter('ALL');
+                            setVendorTypeFilter('ALL');
+                          }}
+                          className="text-xs text-sky-400 hover:text-sky-300 underline cursor-pointer"
+                        >
+                          Reset all filters
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCalls.map((c) => {
+                    const isSelected = selectedCallId === c.id;
+                    const isConnected = c.call_status === 'CONNECTED';
+                    const isPromise = c.call_status === 'PROMISE SECURED';
+                    const isRetry = c.call_status === 'RETRY SCHEDULED';
+                    const isNoAnswer = c.call_status === 'NO ANSWER';
 
-                  return (
-                    <tr
-                      key={c.id}
-                      onClick={() => {
-                        setSelectedCallId(c.id);
-                        if (isPlayingAudio) stopVoiceAudio();
-                      }}
-                      className={`cursor-pointer transition-colors ${
-                        isSelected 
-                          ? 'bg-[#15233c] text-slate-100 font-medium' 
-                          : 'hover:bg-[#141b2a]'
-                      }`}
-                    >
-                      {/* Contact / Business */}
-                      <td className="py-3 text-slate-200 font-semibold">
-                        <div className="flex items-center gap-1.5">
-                          {isSelected && isPlayingAudio && (
-                            <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse shrink-0" />
-                          )}
-                          <span>{c.contact_name}</span>
-                        </div>
-                      </td>
+                    return (
+                      <tr
+                        key={c.id}
+                        onClick={() => {
+                          setSelectedCallId(c.id);
+                          if (isPlayingAudio) stopVoiceAudio();
+                        }}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected 
+                            ? 'bg-[#15233c] text-slate-100 font-medium' 
+                            : 'hover:bg-[#141b2a]'
+                        }`}
+                      >
+                        {/* Contact / Business */}
+                        <td className="py-3 text-slate-200 font-semibold">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {isSelected && isPlayingAudio && (
+                              <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse shrink-0" />
+                            )}
+                            <span>{c.contact_name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#182234] text-sky-400 border border-slate-700/60 font-medium">
+                              {getCallVendorType(c)}
+                            </span>
+                          </div>
+                        </td>
 
                       {/* Phone Number */}
                       <td className="py-3 font-mono text-slate-400 text-[11px]">
@@ -725,7 +934,7 @@ export default function VernacularCalls({ onTriggerVoice }) {
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
           </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -36,6 +36,10 @@ export default function LedgerAndInvoices({
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [dateRangeFilter, setDateRangeFilter] = useState('ALL');
+  const [vendorTypeFilter, setVendorTypeFilter] = useState('ALL');
+  const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+  const [isVendorDropdownOpen, setIsVendorDropdownOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('INV-025');
   const [selectedRows, setSelectedRows] = useState(['INV-025', 'INV-021']);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -45,11 +49,64 @@ export default function LedgerAndInvoices({
   const [isRerunningOCR, setIsRerunningOCR] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
+  const dateDropdownRef = useRef(null);
+  const vendorDropdownRef = useRef(null);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dateDropdownRef.current && !dateDropdownRef.current.contains(event.target)) {
+        setIsDateDropdownOpen(false);
+      }
+      if (vendorDropdownRef.current && !vendorDropdownRef.current.contains(event.target)) {
+        setIsVendorDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Helper to determine vendor type
+  const getVendorType = (inv) => {
+    if (inv?.vendor_type) return inv.vendor_type;
+    if (inv?.party_type) return inv.party_type;
+    const name = inv?.entity_name || '';
+    if (name.includes('Logistics') || name.includes('Freight') || name.includes('Transport')) return 'Logistics';
+    if (name.includes('Electrical') || name.includes('Steel') || name.includes('Alloys') || name.includes('Fabricators')) return 'Supplier';
+    if (name.includes('Hardware') || name.includes('Distributor') || name.includes('Store')) return 'Distributor';
+    return 'Customer';
+  };
+
+  // Helper to parse dates like "2026-10-22" or "22 Oct 2026"
+  const parseInvoiceDate = (dStr) => {
+    if (!dStr) return null;
+    if (/^\d{4}-\d{2}-\d{2}/.test(dStr)) {
+      const parts = dStr.split('-');
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    const m = dStr.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+    if (m) {
+      const months = {
+        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+      };
+      const day = parseInt(m[1], 10);
+      const mon = months[m[2].toLowerCase()];
+      const year = parseInt(m[3], 10);
+      if (!isNaN(day) && mon !== undefined && !isNaN(year)) {
+        return new Date(year, mon, day);
+      }
+    }
+    const d = new Date(dStr);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
   // Fallback realistic records matching user screenshot
   const defaultInvoices = [
     {
       invoice_number: 'INV-025',
       entity_name: 'Sharma Metal Works',
+      vendor_type: 'Customer',
       invoice_date: '22 Oct 2026',
       amount_due: 45000.0,
       tax_amount: 8100.0,
@@ -61,6 +118,7 @@ export default function LedgerAndInvoices({
     {
       invoice_number: 'INV-024',
       entity_name: 'Jai Hind Traders',
+      vendor_type: 'Customer',
       invoice_date: '18 Oct 2026',
       amount_due: 82600.0,
       tax_amount: 14868.0,
@@ -72,6 +130,7 @@ export default function LedgerAndInvoices({
     {
       invoice_number: 'INV-023',
       entity_name: 'Raj Logistics & Co.',
+      vendor_type: 'Logistics',
       invoice_date: '15 Oct 2026',
       amount_due: 124000.0,
       tax_amount: 22320.0,
@@ -83,6 +142,7 @@ export default function LedgerAndInvoices({
     {
       invoice_number: 'INV-022',
       entity_name: 'Karan Electricals',
+      vendor_type: 'Supplier',
       invoice_date: '12 Oct 2026',
       amount_due: 35000.0,
       tax_amount: 6300.0,
@@ -94,6 +154,7 @@ export default function LedgerAndInvoices({
     {
       invoice_number: 'INV-021',
       entity_name: 'Mahata Enterprises',
+      vendor_type: 'Customer',
       invoice_date: '08 Oct 2026',
       amount_due: 55900.0,
       tax_amount: 10062.0,
@@ -101,21 +162,79 @@ export default function LedgerAndInvoices({
       promised_payment_date: '25 Oct (UPI)',
       gstin: '27AAACM9981Q1ZX',
       phone_number: '+919444129900'
+    },
+    {
+      invoice_number: 'INV-020',
+      entity_name: 'Apex Steel & Alloys',
+      vendor_type: 'Supplier',
+      invoice_date: '02 Oct 2026',
+      amount_due: 98000.0,
+      tax_amount: 17640.0,
+      payment_status: 'PAID',
+      promised_payment_date: '02 Oct (NEFT)',
+      gstin: '27AAACA5512B1Z4',
+      phone_number: '+919833445566'
     }
   ];
 
   // Merge transactions from DB with defaults
   const invoiceList = transactions.length > 0 ? transactions : defaultInvoices;
 
-  // Filtered transactions
+  // Filtered transactions (Search + Status + Date Range + Vendor Type)
   const filteredInvoices = invoiceList.filter((inv) => {
+    // 1. Search Query
     const matchesSearch = 
       inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inv.entity_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inv.gstin?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    if (statusFilter === 'ALL') return matchesSearch;
-    return matchesSearch && inv.payment_status === statusFilter;
+    if (!matchesSearch) return false;
+
+    // 2. Status Filter
+    if (statusFilter !== 'ALL' && inv.payment_status !== statusFilter) {
+      return false;
+    }
+
+    // 3. Vendor Type Filter
+    if (vendorTypeFilter !== 'ALL') {
+      const type = getVendorType(inv);
+      if (type.toLowerCase() !== vendorTypeFilter.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // 4. Date Range Filter
+    if (dateRangeFilter !== 'ALL') {
+      const invDate = parseInvoiceDate(inv.invoice_date);
+      if (invDate) {
+        // Reference latest timeline anchor for MSME demo records (Oct 22, 2026)
+        const refDate = new Date(2026, 9, 22);
+        const diffMs = refDate.getTime() - invDate.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (dateRangeFilter === 'TODAY') {
+          // Invoices on the latest active date (22 Oct 2026)
+          if (diffDays !== 0) return false;
+        } else if (dateRangeFilter === '7_DAYS') {
+          // Last 7 Days (Oct 15 - 22)
+          if (diffDays < 0 || diffDays > 7) return false;
+        } else if (dateRangeFilter === '15_DAYS') {
+          // Last 15 Days (Oct 07 - 22)
+          if (diffDays < 0 || diffDays > 15) return false;
+        } else if (dateRangeFilter === '30_DAYS') {
+          // Last 30 Days
+          if (diffDays < 0 || diffDays > 30) return false;
+        } else if (dateRangeFilter === 'THIS_MONTH') {
+          // Month of October 2026
+          if (invDate.getFullYear() !== 2026 || invDate.getMonth() !== 9) return false;
+        } else if (dateRangeFilter === 'LAST_MONTH') {
+          // Month of September 2026
+          if (invDate.getFullYear() !== 2026 || invDate.getMonth() !== 8) return false;
+        }
+      }
+    }
+
+    return true;
   });
 
   // Current active inspected invoice
@@ -361,21 +480,135 @@ export default function LedgerAndInvoices({
           </div>
 
           {/* Filter Dropdown 2: Date Range */}
-          <div className="relative hidden sm:block">
-            <button className="bg-[#111622] border border-[#1d2538] rounded-xl px-3 py-2 text-xs text-slate-300 flex items-center gap-2 hover:bg-[#161d2c] transition-colors">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-              <span>Date Range</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+          <div className="relative" ref={dateDropdownRef}>
+            <button
+              onClick={() => {
+                setIsDateDropdownOpen(!isDateDropdownOpen);
+                setIsVendorDropdownOpen(false);
+              }}
+              className={`rounded-xl px-3 py-2 text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                dateRangeFilter !== 'ALL'
+                  ? 'bg-[#15233c] text-sky-300 border border-sky-500/50 font-semibold shadow-sm'
+                  : 'bg-[#111622] border border-[#1d2538] text-slate-300 hover:bg-[#161d2c]'
+              }`}
+            >
+              <Calendar className={`w-3.5 h-3.5 ${dateRangeFilter !== 'ALL' ? 'text-sky-400' : 'text-slate-400'}`} />
+              <span>
+                {dateRangeFilter === 'ALL' && 'Date Range'}
+                {dateRangeFilter === 'TODAY' && 'Today (Oct 22)'}
+                {dateRangeFilter === '7_DAYS' && 'Last 7 Days'}
+                {dateRangeFilter === '15_DAYS' && 'Last 15 Days'}
+                {dateRangeFilter === '30_DAYS' && 'Last 30 Days'}
+                {dateRangeFilter === 'THIS_MONTH' && 'This Month (Oct)'}
+                {dateRangeFilter === 'LAST_MONTH' && 'Last Month (Sep)'}
+              </span>
+              {dateRangeFilter !== 'ALL' ? (
+                <X
+                  className="w-3.5 h-3.5 text-slate-400 hover:text-white ml-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDateRangeFilter('ALL');
+                  }}
+                />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              )}
             </button>
+
+            {/* Dropdown Menu */}
+            {isDateDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[210px] bg-[#0e1422] border border-slate-700/80 rounded-xl shadow-2xl p-1.5 backdrop-blur-md">
+                <div className="text-[10px] font-bold text-slate-500 uppercase px-2.5 py-1 tracking-wider">
+                  Select Date Range
+                </div>
+                {[
+                  { id: 'ALL', label: 'All Dates (Reset)' },
+                  { id: 'TODAY', label: 'Today (Oct 22, 2026)' },
+                  { id: '7_DAYS', label: 'Last 7 Days (Oct 15 - 22)' },
+                  { id: '15_DAYS', label: 'Last 15 Days (Oct 07 - 22)' },
+                  { id: '30_DAYS', label: 'Last 30 Days' },
+                  { id: 'THIS_MONTH', label: 'This Month (Oct 2026)' },
+                  { id: 'LAST_MONTH', label: 'Last Month (Sep 2026)' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      setDateRangeFilter(opt.id);
+                      setIsDateDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                      dateRangeFilter === opt.id
+                        ? 'bg-sky-500/15 text-sky-400 font-semibold'
+                        : 'text-slate-300 hover:bg-[#161e2e] hover:text-white'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {dateRangeFilter === opt.id && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Filter Dropdown 3: Vendor Type */}
-          <div className="relative hidden sm:block">
-            <button className="bg-[#111622] border border-[#1d2538] rounded-xl px-3 py-2 text-xs text-slate-300 flex items-center gap-2 hover:bg-[#161d2c] transition-colors">
-              <Building2 className="w-3.5 h-3.5 text-slate-400" />
-              <span>Vendor Type</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+          <div className="relative" ref={vendorDropdownRef}>
+            <button
+              onClick={() => {
+                setIsVendorDropdownOpen(!isVendorDropdownOpen);
+                setIsDateDropdownOpen(false);
+              }}
+              className={`rounded-xl px-3 py-2 text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                vendorTypeFilter !== 'ALL'
+                  ? 'bg-[#15233c] text-sky-300 border border-sky-500/50 font-semibold shadow-sm'
+                  : 'bg-[#111622] border border-[#1d2538] text-slate-300 hover:bg-[#161d2c]'
+              }`}
+            >
+              <Building2 className={`w-3.5 h-3.5 ${vendorTypeFilter !== 'ALL' ? 'text-sky-400' : 'text-slate-400'}`} />
+              <span>{vendorTypeFilter === 'ALL' ? 'Vendor Type' : vendorTypeFilter}</span>
+              {vendorTypeFilter !== 'ALL' ? (
+                <X
+                  className="w-3.5 h-3.5 text-slate-400 hover:text-white ml-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setVendorTypeFilter('ALL');
+                  }}
+                />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              )}
             </button>
+
+            {/* Dropdown Menu */}
+            {isVendorDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[200px] bg-[#0e1422] border border-slate-700/80 rounded-xl shadow-2xl p-1.5 backdrop-blur-md">
+                <div className="text-[10px] font-bold text-slate-500 uppercase px-2.5 py-1 tracking-wider">
+                  Filter by Vendor Type
+                </div>
+                {[
+                  { id: 'ALL', label: 'All Vendor Types (Reset)' },
+                  { id: 'Customer', label: 'Customers (Debtors)' },
+                  { id: 'Supplier', label: 'Suppliers (Vendors)' },
+                  { id: 'Logistics', label: 'Logistics & Haulage' },
+                  { id: 'Distributor', label: 'Distributors & Retail' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      setVendorTypeFilter(opt.id);
+                      setIsVendorDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                      vendorTypeFilter === opt.id
+                        ? 'bg-sky-500/15 text-sky-400 font-semibold'
+                        : 'text-slate-300 hover:bg-[#161e2e] hover:text-white'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {vendorTypeFilter === opt.id && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -465,45 +698,71 @@ export default function LedgerAndInvoices({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#182030]">
-                {filteredInvoices.map((inv) => {
-                  const isSelected = selectedInvoiceId === inv.invoice_number;
-                  const isRowChecked = selectedRows.includes(inv.invoice_number);
-                  const isPaid = inv.payment_status === 'PAID';
-                  const isOverdue = inv.payment_status === 'OVERDUE';
-                  const isPartial = inv.payment_status === 'PARTIAL';
+                {filteredInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-8 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-amber-400" />
+                        <span className="text-xs">No invoices found matching selected filters.</span>
+                        <button
+                          onClick={() => {
+                            setSearchQuery('');
+                            setStatusFilter('ALL');
+                            setDateRangeFilter('ALL');
+                            setVendorTypeFilter('ALL');
+                          }}
+                          className="text-xs text-sky-400 hover:text-sky-300 underline cursor-pointer"
+                        >
+                          Reset all filters
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredInvoices.map((inv) => {
+                    const isSelected = selectedInvoiceId === inv.invoice_number;
+                    const isRowChecked = selectedRows.includes(inv.invoice_number);
+                    const isPaid = inv.payment_status === 'PAID';
+                    const isOverdue = inv.payment_status === 'OVERDUE';
+                    const isPartial = inv.payment_status === 'PARTIAL';
 
-                  return (
-                    <tr
-                      key={inv.invoice_number}
-                      onClick={() => setSelectedInvoiceId(inv.invoice_number)}
-                      className={`cursor-pointer transition-colors ${
-                        isSelected 
-                          ? 'bg-[#15233c] text-slate-100 font-medium' 
-                          : 'hover:bg-[#141b2a]'
-                      }`}
-                    >
-                      {/* Checkbox */}
-                      <td className="py-3 px-2 w-6">
-                        <input
-                          type="checkbox"
-                          checked={isRowChecked}
-                          onChange={(e) => handleToggleSelectRow(inv.invoice_number, e)}
-                          className="rounded bg-[#1a2336] border-slate-700 text-blue-500 focus:ring-0 cursor-pointer"
-                        />
-                      </td>
+                    return (
+                      <tr
+                        key={inv.invoice_number}
+                        onClick={() => setSelectedInvoiceId(inv.invoice_number)}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected 
+                            ? 'bg-[#15233c] text-slate-100 font-medium' 
+                            : 'hover:bg-[#141b2a]'
+                        }`}
+                      >
+                        {/* Checkbox */}
+                        <td className="py-3 px-2 w-6">
+                          <input
+                            type="checkbox"
+                            checked={isRowChecked}
+                            onChange={(e) => handleToggleSelectRow(inv.invoice_number, e)}
+                            className="rounded bg-[#1a2336] border-slate-700 text-blue-500 focus:ring-0 cursor-pointer"
+                          />
+                        </td>
 
-                      {/* Invoice ID */}
-                      <td className="py-3 font-mono text-sky-400 font-semibold">
-                        {inv.invoice_number}
-                      </td>
+                        {/* Invoice ID */}
+                        <td className="py-3 font-mono text-sky-400 font-semibold">
+                          {inv.invoice_number}
+                        </td>
 
-                      {/* Vendor / Customer */}
-                      <td className="py-3">
-                        <div className="text-slate-200 font-semibold">{inv.entity_name}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">
-                          {maskPhone(inv.phone_number)}
-                        </div>
-                      </td>
+                        {/* Vendor / Customer */}
+                        <td className="py-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-slate-200 font-semibold">{inv.entity_name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#182234] text-sky-400 border border-slate-700/60 font-medium">
+                              {getVendorType(inv)}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {maskPhone(inv.phone_number)}
+                          </div>
+                        </td>
 
                       {/* Date */}
                       <td className="py-3 text-slate-400 text-[11px] whitespace-nowrap">
@@ -588,7 +847,7 @@ export default function LedgerAndInvoices({
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
           </div>

@@ -121,7 +121,15 @@ async def init_db():
 async def get_all_transactions() -> List[Dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM ledger_transactions ORDER BY id DESC") as cursor:
+        query = """
+            SELECT 
+                lt.*,
+                COALESCE(pd.party_type, 'Customer') as vendor_type
+            FROM ledger_transactions lt
+            LEFT JOIN party_directory pd ON lt.entity_name = pd.entity_name
+            ORDER BY lt.id DESC
+        """
+        async with db.execute(query) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
